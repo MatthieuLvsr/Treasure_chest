@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>three.js webgl - glTF loader</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<!--    <link type="text/css" rel="stylesheet" href="main.css">-->
+    <style>
+        body{
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+
+<script type="module">
+
+    import * as THREE from '../three.js-master/build/three.module.js';
+
+    import { OrbitControls } from '../three.js-master/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from '../three.js-master/examples/jsm/loaders/GLTFLoader.js';
+    import { RGBELoader } from '../three.js-master/examples/jsm/loaders/RGBELoader.js';
+    import { RoughnessMipmapper } from '../three.js-master/examples/jsm/utils/RoughnessMipmapper.js';
+    import { FBXLoader } from '../three.js-master/examples/jsm/loaders/FBXLoader.js';
+
+    let camera, scene, renderer, sound, stats;
+    let bottom, top, cylinder, sneakers, upDown = 1;
+
+    const E = 'e';
+    const chestTime = (degToRad(25)-degToRad(-90))/600
+
+    // CONTROL KEYS
+    const keysPressed = {  }
+    document.addEventListener('keydown', (event) => {
+        (keysPressed)[event.key.toLowerCase()] = true;
+        if(event.key.toLowerCase()==='e')toggleChest();
+    }, false);
+    document.addEventListener('keyup', (event) => {
+        (keysPressed)[event.key.toLowerCase()] = false;
+    }, false);
+
+
+
+    init();
+
+    function init() {
+
+        const container = document.createElement( 'div' );
+        document.body.appendChild( container );
+
+        camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.25, 20 );
+        camera.position.set( - 1.8, 0.6, 2.7 );
+
+        scene = new THREE.Scene();
+
+        new RGBELoader()
+            .setPath( '../three.js-master/examples/textures/equirectangular/' )
+            .load( 'royal_esplanade_1k.hdr', function ( texture ) {
+
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+
+                scene.background = texture;
+                //scene.environment = texture;
+
+
+                // model
+
+                // use of RoughnessMipmapper is optional
+                const roughnessMipmapper = new RoughnessMipmapper( renderer );
+
+                const loader = new GLTFLoader().setPath( '../three.js-master/examples/models/' );
+                loader.load( 'bottomChest.glb', function ( gltf ) {
+
+                    gltf.scene.traverse( function ( node ) {
+
+                        if ( node.isMesh || node.isLight ) node.castShadow = true;
+                        if ( node.isMesh || node.isLight ) node.receiveShadow = true;
+
+                    } );
+
+                    gltf.scene.scale.set(0.1,0.1,0.1);
+                    bottom = gltf.scene;
+                    scene.add( bottom);
+                    loader.load('topChest.glb',function (gltf){
+                        gltf.scene.traverse( function ( node ) {
+
+                            if ( node.isMesh || node.isLight ) node.castShadow = true;
+                            if ( node.isMesh || node.isLight ) node.receiveShadow = true;
+
+                        } );
+                        top = gltf.scene;
+                        top.position.set(-6.3, -14.5,11.8);
+                        const geometry = new THREE.BoxGeometry( 0.01, 0.01, 0.01);
+                        const material = new THREE.MeshBasicMaterial( {color: 0xffff00} );
+                        cylinder = new THREE.Mesh( geometry, material );
+                        cylinder.position.set(0,15,-10);
+                        bottom.add( cylinder );
+                        cylinder.add( top );
+                        cylinder.rotation.x = degToRad(25);
+
+                        loader.setPath( '../three.js-master/examples/models/nvidia_geforce_rtx_3080_founders_edition/' );
+                        loader.load('scene.gltf',function (gltf){
+                            gltf.scene.traverse( function ( node ) {
+
+                                if ( node.isMesh || node.isLight ) node.castShadow = true;
+                                if ( node.isMesh || node.isLight ) node.receiveShadow = true;
+
+                            } );
+                            sneakers = gltf.scene;
+                            sneakers.position.set(0,125.95,110.5);
+                            sneakers.scale.set(15,15,15)
+                            bottom.add(sneakers);
+                            bottom.add( Slight );
+                            animate();
+                        })
+                    })
+
+                    //roughnessMipmapper.dispose();
+
+
+
+                } );
+
+            } );
+
+        const light = new THREE.AmbientLight( 0x404040 , 1); // soft white light
+        scene.add( light );
+
+        const pointLight = new THREE.PointLight( 0x404040, 10, 100 );
+        pointLight.position.set( 10, 10, 10 );
+        pointLight.castShadow = true;
+        scene.add( pointLight );
+
+        const Slight = new THREE.PointLight( 0xffd700, 10, 100 );
+        Slight.position.set( 0, 3, 0 );
+        Slight.castShadow = true;
+
+        const sphereSize = 1;
+        const pointLightHelper = new THREE.PointLightHelper( Slight, sphereSize );
+        scene.add( pointLightHelper );
+
+        var listener = new THREE.AudioListener();
+        camera.add( listener );
+
+// create a global audio source
+        sound = new THREE.Audio( listener );
+
+        var audioLoader = new THREE.AudioLoader();
+
+//Load a sound and set it as the Audio object's buffer
+        audioLoader.load( '../three.js-master/examples/sounds/Zelda-open-coffre.mp3', function( buffer ) {
+            sound.setBuffer( buffer );
+            //sound.setLoop(true);
+            sound.setVolume(0.5);
+        });
+
+
+        renderer = new THREE.WebGLRenderer( { antialias: true } );
+        renderer.setPixelRatio( window.devicePixelRatio );
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
+        container.appendChild( renderer.domElement );
+
+        const controls = new OrbitControls( camera, renderer.domElement );
+        controls.addEventListener( 'change', render ); // use if there is no animation loop
+        controls.minDistance = 2;
+        controls.maxDistance = 10;
+        controls.target.set( 0, 0, - 0.2 );
+        controls.update();
+
+        window.addEventListener( 'resize', onWindowResize );
+
+    }
+
+    function onWindowResize() {
+
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        renderer.setSize( window.innerWidth, window.innerHeight );
+
+        render();
+
+    }
+
+    //
+
+    function animate() {
+
+        if(upDown === 0 && cylinder.rotation.x > degToRad(-90))cylinder.rotation.x -= chestTime;
+        if(upDown === 1 && cylinder.rotation.x < degToRad(25))cylinder.rotation.x += chestTime;
+
+        requestAnimationFrame(animate);
+        render();
+    }
+
+    function render() {
+
+        renderer.render( scene, camera );
+
+    }
+
+    function degToRad(deg){
+        return (deg * Math.PI) / 180;
+    }
+
+    function toggleChest(){
+        if(cylinder.rotation.x >= degToRad(25))sound.play();
+        upDown = upDown === 1?0:1;
+        if (upDown === 1)sound.stop()
+        console.log(upDown)
+    }
+
+
+</script>
+
+</body>
+</html>
